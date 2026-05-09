@@ -1,30 +1,57 @@
 @import "tailwindcss";
 
+/* ============================================================================
+ * Tokens
+ * Cool palette refined — depth via warmer near-black, single accent (violet).
+ * ========================================================================== */
+
 @theme {
-  --color-bg: #000000;
-  --color-bg-surface: #0A0A0A;
-  --color-bg-elevated: #111111;
-  --color-bg-hover: #1A1A1A;
+  /* Background ramp — warm-tinted near-black, NOT pure #000. Layered for depth. */
+  --color-bg: #0A0908;
+  --color-bg-surface: #121110;
+  --color-bg-elevated: #1A1916;
+  --color-bg-hover: #252320;
+  --color-bg-deep: #050403;
 
-  --color-border: #1E1E1E;
-  --color-border-subtle: #151515;
-  --color-border-strong: #2A2A2A;
+  /* Borders — barely visible, just enough to separate */
+  --color-border: #1F1D1A;
+  --color-border-subtle: #16140F;
+  --color-border-strong: #2C2A26;
 
-  --color-text: #F5F5F5;
-  --color-text-secondary: #999999;
-  --color-text-muted: #5A5A5A;
+  /* Text — warm cream, not cold white */
+  --color-text: #F5F2EB;
+  --color-text-secondary: #B0AAA0;
+  --color-text-muted: #6E6960;
+  --color-text-faint: #4A453E;
 
+  /* Single accent — cool violet (per Naomi's "keep cool palette" direction). */
   --color-accent: #A78BFA;
-  --color-accent-hover: #8B5CF6;
-  --color-accent-glow: rgba(167, 139, 250, 0.18);
+  --color-accent-hover: #8B6FF0;
+  --color-accent-soft: rgba(167, 139, 250, 0.14);
+  --color-accent-glow: rgba(167, 139, 250, 0.32);
 
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
-  --color-success: #34D399;
+  /* State colors — hue-shifts of accent, not separate colors */
+  --color-success: #86E8B5;
+  --color-error: #F87171;
+  --color-warning: #F4C57B;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Type families */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+  /* The assistant's spoken voice — system serif keeps it free + still literary */
+  --font-serif: ui-serif, Georgia, "Times New Roman", serif;
+
+  /* Motion — custom cubic-beziers, no defaults anywhere */
+  --ease-decel: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-accel: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-flow: cubic-bezier(0.65, 0, 0.35, 1);
 }
+
+/* ============================================================================
+ * Base
+ * ========================================================================== */
 
 html {
   color-scheme: dark;
@@ -38,20 +65,41 @@ body {
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.012em;
   overflow: hidden;
-  letter-spacing: -0.011em;
 }
 
-/* Subtle radial vignette so the orb floats off the page */
+/* Subtle warm vignette behind the focal element */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 50% 50%, rgba(167, 139, 250, 0.04), transparent 70%),
-    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(255, 255, 255, 0.02), transparent 60%);
+    radial-gradient(ellipse 70% 55% at 50% 50%, rgba(167, 139, 250, 0.05), transparent 70%),
+    radial-gradient(ellipse 100% 80% at 50% 100%, rgba(0, 0, 0, 0.5), transparent 60%);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Edge-of-viewport voice indicator — softens when active. Driven by JS via
+ * data attributes on <body data-voice-state="...">. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+  box-shadow: inset 0 0 0 0 transparent;
+  transition: box-shadow 600ms var(--ease-decel);
+}
+body[data-voice-state="listening"]::after {
+  box-shadow: inset 0 0 140px 0 rgba(167, 139, 250, 0.18);
+}
+body[data-voice-state="thinking"]::after {
+  box-shadow: inset 0 0 90px 0 rgba(167, 139, 250, 0.08);
+}
+body[data-voice-state="speaking"]::after {
+  box-shadow: inset 0 0 110px 0 rgba(245, 242, 235, 0.12);
 }
 
 main {
@@ -59,19 +107,20 @@ main {
   z-index: 1;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ============================================================================
+ * Scrollbar + selection + focus
+ * ========================================================================== */
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: 3px;
 }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
 
 ::selection {
-  background-color: var(--color-accent-glow);
+  background-color: var(--color-accent-soft);
   color: var(--color-text);
 }
 
@@ -79,208 +128,44 @@ main {
   outline: none;
 }
 
-/* ============ ORB ============ */
+/* ============================================================================
+ * Typography helpers
+ * ========================================================================== */
 
-.orb-stack {
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-
-.orb-core {
-  position: relative;
-  border-radius: 9999px;
-  overflow: hidden;
-  isolation: isolate;
-  background: radial-gradient(
-    circle at 30% 25%,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(220, 220, 230, 0.85) 22%,
-    rgba(140, 140, 160, 0.55) 55%,
-    rgba(40, 40, 50, 0.25) 90%
-  );
-  transition: filter 600ms ease, transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+.font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.005em;
 }
 
-.orb-core::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle at 70% 80%,
-    rgba(0, 0, 0, 0.35) 0%,
-    transparent 55%
-  );
-  pointer-events: none;
+.text-display {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-weight: 500;
 }
 
-.orb-glow {
-  position: absolute;
-  inset: -25%;
-  border-radius: 9999px;
-  pointer-events: none;
-  filter: blur(40px);
-  transition: opacity 600ms ease, transform 600ms ease, background 600ms ease;
-  opacity: 0.25;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.18) 0%,
-    rgba(167, 139, 250, 0.08) 35%,
-    transparent 70%
-  );
+.text-display-serif {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: clamp(1.5rem, 3.5vw, 2.25rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: 400;
 }
 
-.orb-ring {
-  position: absolute;
-  inset: -8%;
-  border-radius: 9999px;
-  pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  opacity: 0;
-  transition: opacity 400ms ease, transform 400ms ease;
+.text-balance { text-wrap: balance; }
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--color-text-muted);
 }
 
-/* States */
-.orb-state-idle .orb-core { animation: orb-breath 5.5s ease-in-out infinite; }
-.orb-state-idle .orb-glow { animation: orb-breath-glow 5.5s ease-in-out infinite; }
-
-.orb-state-speaking .orb-core { animation: orb-pulse-core 1.5s ease-in-out infinite; }
-.orb-state-speaking .orb-glow {
-  opacity: 0.7;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.3) 0%,
-    rgba(255, 255, 255, 0.1) 40%,
-    transparent 75%
-  );
-  animation: orb-pulse-glow 1.5s ease-in-out infinite;
-}
-
-.orb-state-listening .orb-core {
-  background: radial-gradient(
-    circle at 30% 25%,
-    rgba(220, 200, 255, 1) 0%,
-    rgba(167, 139, 250, 0.95) 25%,
-    rgba(124, 58, 237, 0.7) 60%,
-    rgba(40, 20, 80, 0.3) 95%
-  );
-  animation: orb-listen-core 1.6s ease-in-out infinite;
-}
-.orb-state-listening .orb-glow {
-  opacity: 0.85;
-  background: radial-gradient(
-    circle,
-    rgba(167, 139, 250, 0.5) 0%,
-    rgba(167, 139, 250, 0.2) 40%,
-    transparent 75%
-  );
-  animation: orb-listen-glow 1.6s ease-in-out infinite;
-}
-.orb-state-listening .orb-ring {
-  opacity: 1;
-  border-color: rgba(167, 139, 250, 0.3);
-  animation: orb-ring-pulse 1.6s ease-out infinite;
-}
-
-.orb-state-thinking .orb-core {
-  animation: orb-think 1.8s ease-in-out infinite;
-  filter: brightness(0.7) contrast(0.95);
-}
-.orb-state-thinking .orb-glow {
-  opacity: 0.15;
-  animation: orb-think-glow 1.8s ease-in-out infinite;
-}
-
-.orb-state-done .orb-core {
-  filter: brightness(0.6);
-  animation: orb-rest 6s ease-in-out infinite;
-}
-.orb-state-done .orb-glow {
-  opacity: 0.12;
-  background: radial-gradient(
-    circle,
-    rgba(52, 211, 153, 0.2) 0%,
-    transparent 65%
-  );
-}
-
-@keyframes orb-breath {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.025); }
-}
-@keyframes orb-breath-glow {
-  0%, 100% { opacity: 0.25; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.05); }
-}
-@keyframes orb-pulse-core {
-  0%, 100% { transform: scale(1); filter: brightness(1); }
-  50% { transform: scale(1.06); filter: brightness(1.1); }
-}
-@keyframes orb-pulse-glow {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.15); }
-}
-@keyframes orb-listen-core {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-}
-@keyframes orb-listen-glow {
-  0%, 100% { opacity: 0.7; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.2); }
-}
-@keyframes orb-ring-pulse {
-  0% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.35); }
-}
-@keyframes orb-think {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(0.96); opacity: 0.55; }
-}
-@keyframes orb-think-glow {
-  0%, 100% { opacity: 0.1; }
-  50% { opacity: 0.25; }
-}
-@keyframes orb-rest {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.015); }
-}
-
-/* ============ WAVEFORM (listening visualization) ============ */
-
-.wave-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 24px;
-  margin-top: 32px;
-  opacity: 0;
-  transition: opacity 300ms ease;
-}
-.wave-container.active {
-  opacity: 1;
-}
-.wave-bar {
-  width: 3px;
-  border-radius: 999px;
-  background: var(--color-accent);
-  transition: height 100ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* ============ Reusable bits ============ */
-
-.fade-in {
-  animation: fade-in 600ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-}
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.text-balance {
-  text-wrap: balance;
-}
+/* ============================================================================
+ * Components
+ * ========================================================================== */
 
 .divider-dot {
   display: inline-block;
@@ -290,7 +175,7 @@ main {
   background: currentColor;
   vertical-align: middle;
   margin: 0 10px;
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
 .pill {
@@ -308,8 +193,8 @@ main {
   color: var(--color-text-secondary);
 }
 .pill-accent {
-  background: rgba(167, 139, 250, 0.08);
-  border-color: rgba(167, 139, 250, 0.2);
+  background: var(--color-accent-soft);
+  border-color: rgba(167, 139, 250, 0.22);
   color: var(--color-accent);
 }
 
@@ -317,21 +202,17 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 28px;
+  padding: 12px 24px;
   border-radius: 999px;
   background: var(--color-text);
   color: var(--color-bg);
   font-weight: 500;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  transition: transform 200ms ease, background 200ms ease;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  transition: transform 250ms var(--ease-decel), background 250ms var(--ease-standard);
 }
-.btn-primary:hover {
-  background: rgba(255, 255, 255, 0.92);
-}
-.btn-primary:active {
-  transform: scale(0.97);
-}
+.btn-primary:hover { background: rgba(245, 242, 235, 0.92); }
+.btn-primary:active { transform: scale(0.97); }
 
 .btn-ghost {
   display: inline-flex;
@@ -343,9 +224,136 @@ main {
   color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 500;
-  transition: color 200ms ease, background 200ms ease;
+  transition: color 200ms var(--ease-standard), background 200ms var(--ease-standard);
 }
 .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.04);
   color: var(--color-text);
+}
+
+/* ============================================================================
+ * Motion utilities
+ * ========================================================================== */
+
+.fade-in {
+  animation: fade-in 600ms var(--ease-decel) backwards;
+}
+.fade-in-soft {
+  animation: fade-in 800ms var(--ease-decel) backwards;
+}
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-500 { animation-delay: 500ms; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-up {
+  animation: slide-up 500ms var(--ease-decel) backwards;
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Streaming text cursor — for the assistant's spoken responses while
+ * generating or while TTS is still playing. */
+.cursor-blink::after {
+  content: "▌";
+  margin-left: 2px;
+  opacity: 0.6;
+  animation: cursor-blink 1.1s var(--ease-flow) infinite;
+}
+@keyframes cursor-blink {
+  0%, 49% { opacity: 0.6; }
+  50%, 100% { opacity: 0; }
+}
+
+/* ============================================================================
+ * The mesh visualizer — placeholder breathing for v3 pass 1.
+ * Pass 2 replaces this with WebGL fragment shader.
+ * ========================================================================== */
+
+.mesh-stack {
+  position: relative;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.mesh-fallback {
+  position: relative;
+  border-radius: 9999px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 25%,
+      rgba(245, 242, 235, 0.95) 0%,
+      rgba(167, 139, 250, 0.55) 35%,
+      rgba(76, 29, 149, 0.45) 75%,
+      rgba(20, 10, 40, 0.6) 100%);
+  transition:
+    filter 600ms var(--ease-decel),
+    transform 500ms var(--ease-decel),
+    box-shadow 600ms var(--ease-decel);
+  box-shadow:
+    0 0 60px 0 rgba(167, 139, 250, 0.16),
+    inset 0 0 40px 0 rgba(0, 0, 0, 0.25);
+}
+
+.mesh-fallback.idle { animation: mesh-breathe 6s var(--ease-flow) infinite; }
+.mesh-fallback.listening {
+  background:
+    radial-gradient(circle at 30% 25%,
+      rgba(220, 200, 255, 1) 0%,
+      rgba(167, 139, 250, 0.95) 30%,
+      rgba(124, 58, 237, 0.7) 65%,
+      rgba(40, 20, 80, 0.4) 100%);
+  box-shadow:
+    0 0 100px 8px rgba(167, 139, 250, 0.4),
+    inset 0 0 40px 0 rgba(0, 0, 0, 0.2);
+  animation: mesh-listen 1.6s var(--ease-flow) infinite;
+}
+.mesh-fallback.thinking {
+  filter: brightness(0.7) saturate(0.85);
+  animation: mesh-think 2s var(--ease-flow) infinite;
+}
+.mesh-fallback.speaking {
+  background:
+    radial-gradient(circle at 30% 25%,
+      rgba(255, 252, 245, 1) 0%,
+      rgba(220, 210, 250, 0.95) 30%,
+      rgba(167, 139, 250, 0.75) 65%,
+      rgba(60, 40, 100, 0.5) 100%);
+  box-shadow:
+    0 0 110px 6px rgba(245, 242, 235, 0.25),
+    inset 0 0 40px 0 rgba(0, 0, 0, 0.2);
+  animation: mesh-speak 1.4s var(--ease-flow) infinite;
+}
+.mesh-fallback.done {
+  filter: brightness(0.55);
+  animation: mesh-rest 8s var(--ease-flow) infinite;
+}
+
+@keyframes mesh-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+@keyframes mesh-listen {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@keyframes mesh-think {
+  0%, 100% { transform: scale(0.97); opacity: 0.8; }
+  50% { transform: scale(1.02); opacity: 0.55; }
+}
+@keyframes mesh-speak {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@keyframes mesh-rest {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
 }

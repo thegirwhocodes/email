@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
 export const metadata: Metadata = {
-  title: "Voice Email — Cortex",
-  description: "One email at a time, by voice.",
+  title: "voice email",
+  description: "the smart email friend you wish you had.",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
@@ -20,9 +17,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body>
-        <ClerkProvider appearance={{ baseTheme: dark }}>
+        <ClerkProvider
+          appearance={{
+            baseTheme: dark,
+            variables: {
+              colorPrimary: "#A78BFA",
+              colorBackground: "#0A0908",
+              colorText: "#F5F2EB",
+              borderRadius: "12px",
+              fontFamily: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+            },
+          }}
+        >
           {children}
         </ClerkProvider>
       </body>

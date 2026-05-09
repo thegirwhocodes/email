@@ -1,20 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { Orb } from "@/components/orb";
+import { Mesh } from "@/components/mesh";
 import { useVoice } from "@/components/use-voice";
 import { useTts } from "@/components/use-tts";
-import { WaveVisualizer } from "@/components/wave-visualizer";
+import { CommandPalette } from "@/components/command-palette";
 
-type Stage =
-  | "idle"
-  | "thinking"
-  | "speaking"
-  | "listening"
-  | "done"
-  | "error";
+type Stage = "idle" | "thinking" | "speaking" | "listening" | "done" | "error";
 
 interface CurrentItem {
   source_id: string;
@@ -48,6 +42,7 @@ const TIER_LABEL: Record<string, string> = {
 
 export default function VoiceEmailClient() {
   const voice = useVoice();
+  const [debug, setDebug] = useState(false);
   const [ttsSource, setTtsSource] = useState<string | null>(null);
   const tts = useTts({
     onSource: (source, reason) => {
@@ -56,9 +51,7 @@ export default function VoiceEmailClient() {
   });
 
   const [stage, setStage] = useState<Stage>("idle");
-  const [statusText, setStatusText] = useState(
-    "Tap to start your inbox catch-up."
-  );
+  const [statusText, setStatusText] = useState("Tap to begin.");
   const [errorText, setErrorText] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
 
@@ -67,8 +60,28 @@ export default function VoiceEmailClient() {
   const [currentItem, setCurrentItem] = useState<CurrentItem | null>(null);
   const [doneReason, setDoneReason] = useState<string | null>(null);
 
-  const stageRef = useRef<Stage>(stage);
-  stageRef.current = stage;
+  // ?debug=1 unlocks the TTS source line in the footer
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("debug") === "1") setDebug(true);
+  }, []);
+
+  // Sync the body data attribute so the edge-of-viewport glow can animate
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const state = tts.speaking
+      ? "speaking"
+      : voice.listening
+      ? "listening"
+      : stage === "thinking"
+      ? "thinking"
+      : "idle";
+    document.body.setAttribute("data-voice-state", state);
+    return () => {
+      document.body.removeAttribute("data-voice-state");
+    };
+  }, [tts.speaking, voice.listening, stage]);
 
   async function startSession() {
     setHasStarted(true);
@@ -82,7 +95,7 @@ export default function VoiceEmailClient() {
 
   async function runOneTurn() {
     setStage("thinking");
-    setStatusText("Thinking…");
+    setStatusText("");
     try {
       const res = await fetch("/api/assistant/turn", {
         method: "POST",
@@ -107,7 +120,7 @@ export default function VoiceEmailClient() {
       sessionStateRef.current = data.session_state;
       setCurrentItem(data.session_state.current_item || null);
 
-      const text = data.speak_text || "I don't have anything else to add.";
+      const text = data.speak_text || "Nothing to add.";
       setStatusText(text);
 
       setStage("speaking");
@@ -116,10 +129,7 @@ export default function VoiceEmailClient() {
       if (data.done) {
         setStage("done");
         setDoneReason(data.session_state.wrap_reason || null);
-        setStatusText(
-          data.session_state.wrap_reason ||
-            "You're caught up."
-        );
+        setStatusText(data.session_state.wrap_reason || "Quiet now.");
         return;
       }
 
@@ -128,18 +138,18 @@ export default function VoiceEmailClient() {
       console.error(err);
       setStage("error");
       setErrorText(err instanceof Error ? err.message : String(err));
-      setStatusText("Something went wrong. Tap to try again.");
+      setStatusText("Lost the thread. Tap.");
     }
   }
 
   async function listenForUser() {
     setStage("listening");
-    setStatusText("Listening…");
+    setStatusText("");
     try {
       const transcript = await voice.startListening();
       if (!transcript || !transcript.trim()) {
         setStage("speaking");
-        await tts.speak("I didn't catch that. Could you say it again?");
+        await tts.speak("Say that again?");
         return await listenForUser();
       }
       messagesRef.current = [
@@ -151,14 +161,14 @@ export default function VoiceEmailClient() {
       console.error(err);
       setStage("error");
       setErrorText(err instanceof Error ? err.message : String(err));
-      setStatusText("Microphone trouble. Tap to retry.");
+      setStatusText("Mic dropped. Tap.");
     }
   }
 
   function handleOrbTap() {
     tts.prime();
     if (!voice.supported) {
-      setStatusText("Voice isn't supported here. Use Chrome on macOS.");
+      setStatusText("Voice needs Chrome on macOS.");
       return;
     }
     if (tts.speaking) {
@@ -196,33 +206,38 @@ export default function VoiceEmailClient() {
       ? "done"
       : "idle";
 
-  let hint = "Tap to start";
+  let hint = "tap to begin.";
   if (hasStarted) {
-    if (tts.speaking) hint = "Tap to interrupt";
-    else if (voice.listening) hint = "Tap to stop";
-    else if (stage === "thinking") hint = "Working";
-    else if (stage === "done") hint = "Tap to start over";
-    else if (stage === "error") hint = "Tap to retry";
+    if (tts.speaking) hint = "tap to interrupt.";
+    else if (voice.listening) hint = "tap to stop.";
+    else if (stage === "thinking") hint = "";
+    else if (stage === "done") hint = "tap for another pass.";
+    else if (stage === "error") hint = "tap to retry.";
   }
 
   const sentCount = sessionStateRef.current.sent?.length ?? 0;
   const archivedCount = sessionStateRef.current.archived?.length ?? 0;
 
+  // Two voices on one surface: assistant lines render in serif italic,
+  // user transcript renders in sans, lower opacity.
+  const showingPartial = !!voice.partial && voice.listening;
+
   return (
     <main className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between px-6 py-5">
-        <div className="flex items-baseline gap-5">
+      <CommandPalette onStartSession={() => void startSession()} />
+      <header className="flex items-center justify-between px-8 py-6">
+        <div className="flex items-baseline gap-6">
           <Link
             href="/"
-            className="text-sm text-text tracking-[0.18em] uppercase font-medium hover:text-text-secondary transition-colors"
+            className="font-serif italic text-base text-text hover:text-text-secondary transition-colors"
           >
-            Voice<span className="text-text-muted"> · </span>Email
+            voice email
           </Link>
           <Link
             href="/digest"
-            className="text-xs text-text-muted tracking-[0.15em] uppercase font-medium hover:text-text transition-colors"
+            className="eyebrow text-text-muted hover:text-text transition-colors"
           >
-            Digest
+            digest
           </Link>
         </div>
         <UserButton />
@@ -233,35 +248,45 @@ export default function VoiceEmailClient() {
           type="button"
           onClick={handleOrbTap}
           aria-label="Tap to interact"
-          className="cursor-pointer focus:outline-none transition-transform active:scale-[0.97] fade-in"
+          className="cursor-pointer focus:outline-none transition-transform active:scale-[0.96] fade-in"
+          style={{ transitionTimingFunction: "var(--ease-decel)" }}
         >
-          <Orb mode={orbMode} />
+          <Mesh mode={orbMode} analyser={tts.analyser} size={320} />
         </button>
 
-        <WaveVisualizer active={voice.listening} />
-
         {currentItem && stage !== "done" && (
-          <div className="mt-7 flex items-center gap-3 fade-in">
-            <span className="pill pill-accent">
+          <div className="mt-8 eyebrow fade-in">
+            <span className="text-accent">
               {TIER_LABEL[currentItem.tier] || currentItem.tier}
             </span>
-            <span className="text-xs text-text-muted">
+            <span className="divider-dot text-text-muted" />
+            <span className="text-text-secondary normal-case tracking-normal">
               {cleanFrom(currentItem.from)}
             </span>
           </div>
         )}
 
-        <div className="mt-8 max-w-xl text-center min-h-[4.5rem] px-2 fade-in">
-          <p className="text-text leading-[1.5] text-[19px] text-balance">
-            {voice.partial && voice.listening ? voice.partial : statusText}
-          </p>
-          {errorText && (
-            <p className="mt-3 text-xs text-error">{errorText}</p>
+        <div className="mt-10 max-w-2xl text-center min-h-[5rem] px-2">
+          {stage === "speaking" || stage === "done" ? (
+            <p className="text-display-serif text-text text-balance fade-in">
+              {statusText}
+            </p>
+          ) : showingPartial ? (
+            <p className="text-text-secondary text-lg italic text-balance fade-in opacity-80">
+              {voice.partial}
+            </p>
+          ) : (
+            <p className="text-text-muted text-lg text-balance">
+              {statusText}
+            </p>
+          )}
+          {errorText && debug && (
+            <p className="mt-3 text-xs text-error font-mono">{errorText}</p>
           )}
         </div>
 
         {stage === "done" && (sentCount > 0 || archivedCount > 0) && (
-          <div className="mt-10 flex items-center gap-6 text-xs text-text-muted fade-in">
+          <div className="mt-10 flex items-center gap-6 eyebrow fade-in delay-200">
             {sentCount > 0 && (
               <span>
                 <span className="text-text font-medium">{sentCount}</span> sent
@@ -269,36 +294,39 @@ export default function VoiceEmailClient() {
             )}
             {archivedCount > 0 && (
               <span>
-                <span className="text-text font-medium">{archivedCount}</span> archived
+                <span className="text-text font-medium">{archivedCount}</span>{" "}
+                archived
               </span>
             )}
           </div>
         )}
 
         {!voice.supported && (
-          <p className="mt-8 text-sm text-warning text-center max-w-sm">
-            Voice isn&apos;t supported in this browser. Open in Chrome on macOS
-            for the full experience.
+          <p className="mt-8 text-xs text-warning text-center max-w-sm">
+            Open in Chrome on macOS for voice.
           </p>
         )}
       </div>
 
-      <footer className="px-6 py-5 flex items-center justify-center gap-2 text-xs text-text-muted">
+      <footer className="px-8 py-6 flex items-center justify-center gap-2 eyebrow text-text-faint">
         <span>{hint}</span>
-        {ttsSource && (
+        <span className="divider-dot" />
+        <kbd className="font-mono text-[10px] tracking-normal normal-case px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle">
+          ⌘K
+        </kbd>
+        {debug && ttsSource && (
           <>
             <span className="divider-dot" />
-            <span className="opacity-50">{ttsSource}</span>
+            <span className="opacity-60 normal-case tracking-normal font-mono text-[10px]">
+              {ttsSource}
+            </span>
           </>
         )}
         {doneReason && stage === "done" && (
           <>
             <span className="divider-dot" />
-            <Link
-              href="/digest"
-              className="hover:text-text transition-colors"
-            >
-              See the digest →
+            <Link href="/digest" className="hover:text-text transition-colors">
+              digest →
             </Link>
           </>
         )}

@@ -21,10 +21,28 @@ interface UseTtsOptions {
 export function useTts(options: UseTtsOptions = {}) {
   const { onSource } = options;
   const [speaking, setSpeaking] = useState(false);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const browserVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const primedRef = useRef(false);
   const elevenLabsAvailableRef = useRef<boolean | null>(null);
+
+  // Lazy-create a shared AudioContext that survives the page lifetime so we
+  // can attach an AnalyserNode to every TTS audio element. The Mesh component
+  // reads the analyser to lip-sync the visualizer to the actual audio.
+  function getAudioCtx(): AudioContext | null {
+    if (typeof window === "undefined") return null;
+    if (audioCtxRef.current) return audioCtxRef.current;
+    const Ctx =
+      (window as unknown as { AudioContext?: typeof AudioContext })
+        .AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtxRef.current = new Ctx();
+    return audioCtxRef.current;
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -179,13 +197,34 @@ export function useTts(options: UseTtsOptions = {}) {
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audio.preload = "auto";
+        audio.crossOrigin = "anonymous";
         audioRef.current = audio;
+
+        // Attach to AudioContext so the Mesh can lip-sync to the waveform
+        let analyserNode: AnalyserNode | null = null;
+        try {
+          const ctx = getAudioCtx();
+          if (ctx) {
+            if (ctx.state === "suspended") void ctx.resume();
+            const source = ctx.createMediaElementSource(audio);
+            analyserNode = ctx.createAnalyser();
+            analyserNode.fftSize = 256;
+            analyserNode.smoothingTimeConstant = 0.6;
+            source.connect(analyserNode);
+            analyserNode.connect(ctx.destination);
+            setAnalyser(analyserNode);
+          }
+        } catch {
+          // Falls through to default <audio> playback (no visualization)
+        }
+
         return new Promise<{ ok: true } | { ok: false; reason: string }>(
           (resolve) => {
             let resolved = false;
             const cleanup = () => {
               URL.revokeObjectURL(url);
               audioRef.current = null;
+              setAnalyser(null);
             };
             const done = (result: { ok: true } | { ok: false; reason: string }) => {
               if (resolved) return;
@@ -205,7 +244,6 @@ export function useTts(options: UseTtsOptions = {}) {
                 }`,
               });
             });
-            // Hard timeout — if the audio never plays/ends after 60s, bail
             setTimeout(() => done({ ok: false, reason: "tts timeout" }), 60_000);
           }
         );
@@ -248,5 +286,5 @@ export function useTts(options: UseTtsOptions = {}) {
     [cancel, speakBrowser, speakElevenLabs, onSource]
   );
 
-  return { speak, cancel, prime, speaking };
+  return { speak, cancel, prime, speaking, analyser };
 }
