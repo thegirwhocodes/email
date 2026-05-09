@@ -1,0 +1,351 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #000000;
+  --color-bg-surface: #0A0A0A;
+  --color-bg-elevated: #111111;
+  --color-bg-hover: #1A1A1A;
+
+  --color-border: #1E1E1E;
+  --color-border-subtle: #151515;
+  --color-border-strong: #2A2A2A;
+
+  --color-text: #F5F5F5;
+  --color-text-secondary: #999999;
+  --color-text-muted: #5A5A5A;
+
+  --color-accent: #A78BFA;
+  --color-accent-hover: #8B5CF6;
+  --color-accent-glow: rgba(167, 139, 250, 0.18);
+
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-success: #34D399;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+  background-color: var(--color-bg);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  letter-spacing: -0.011em;
+}
+
+/* Subtle radial vignette so the orb floats off the page */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 50%, rgba(167, 139, 250, 0.04), transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(255, 255, 255, 0.02), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+
+::selection {
+  background-color: var(--color-accent-glow);
+  color: var(--color-text);
+}
+
+:focus-visible {
+  outline: none;
+}
+
+/* ============ ORB ============ */
+
+.orb-stack {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.orb-core {
+  position: relative;
+  border-radius: 9999px;
+  overflow: hidden;
+  isolation: isolate;
+  background: radial-gradient(
+    circle at 30% 25%,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(220, 220, 230, 0.85) 22%,
+    rgba(140, 140, 160, 0.55) 55%,
+    rgba(40, 40, 50, 0.25) 90%
+  );
+  transition: filter 600ms ease, transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.orb-core::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 70% 80%,
+    rgba(0, 0, 0, 0.35) 0%,
+    transparent 55%
+  );
+  pointer-events: none;
+}
+
+.orb-glow {
+  position: absolute;
+  inset: -25%;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(40px);
+  transition: opacity 600ms ease, transform 600ms ease, background 600ms ease;
+  opacity: 0.25;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(167, 139, 250, 0.08) 35%,
+    transparent 70%
+  );
+}
+
+.orb-ring {
+  position: absolute;
+  inset: -8%;
+  border-radius: 9999px;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  opacity: 0;
+  transition: opacity 400ms ease, transform 400ms ease;
+}
+
+/* States */
+.orb-state-idle .orb-core { animation: orb-breath 5.5s ease-in-out infinite; }
+.orb-state-idle .orb-glow { animation: orb-breath-glow 5.5s ease-in-out infinite; }
+
+.orb-state-speaking .orb-core { animation: orb-pulse-core 1.5s ease-in-out infinite; }
+.orb-state-speaking .orb-glow {
+  opacity: 0.7;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0.1) 40%,
+    transparent 75%
+  );
+  animation: orb-pulse-glow 1.5s ease-in-out infinite;
+}
+
+.orb-state-listening .orb-core {
+  background: radial-gradient(
+    circle at 30% 25%,
+    rgba(220, 200, 255, 1) 0%,
+    rgba(167, 139, 250, 0.95) 25%,
+    rgba(124, 58, 237, 0.7) 60%,
+    rgba(40, 20, 80, 0.3) 95%
+  );
+  animation: orb-listen-core 1.6s ease-in-out infinite;
+}
+.orb-state-listening .orb-glow {
+  opacity: 0.85;
+  background: radial-gradient(
+    circle,
+    rgba(167, 139, 250, 0.5) 0%,
+    rgba(167, 139, 250, 0.2) 40%,
+    transparent 75%
+  );
+  animation: orb-listen-glow 1.6s ease-in-out infinite;
+}
+.orb-state-listening .orb-ring {
+  opacity: 1;
+  border-color: rgba(167, 139, 250, 0.3);
+  animation: orb-ring-pulse 1.6s ease-out infinite;
+}
+
+.orb-state-thinking .orb-core {
+  animation: orb-think 1.8s ease-in-out infinite;
+  filter: brightness(0.7) contrast(0.95);
+}
+.orb-state-thinking .orb-glow {
+  opacity: 0.15;
+  animation: orb-think-glow 1.8s ease-in-out infinite;
+}
+
+.orb-state-done .orb-core {
+  filter: brightness(0.6);
+  animation: orb-rest 6s ease-in-out infinite;
+}
+.orb-state-done .orb-glow {
+  opacity: 0.12;
+  background: radial-gradient(
+    circle,
+    rgba(52, 211, 153, 0.2) 0%,
+    transparent 65%
+  );
+}
+
+@keyframes orb-breath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+@keyframes orb-breath-glow {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.05); }
+}
+@keyframes orb-pulse-core {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.06); filter: brightness(1.1); }
+}
+@keyframes orb-pulse-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.15); }
+}
+@keyframes orb-listen-core {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@keyframes orb-listen-glow {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+@keyframes orb-ring-pulse {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+@keyframes orb-think {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(0.96); opacity: 0.55; }
+}
+@keyframes orb-think-glow {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.25; }
+}
+@keyframes orb-rest {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.015); }
+}
+
+/* ============ WAVEFORM (listening visualization) ============ */
+
+.wave-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  margin-top: 32px;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.wave-container.active {
+  opacity: 1;
+}
+.wave-bar {
+  width: 3px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: height 100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ============ Reusable bits ============ */
+
+.fade-in {
+  animation: fade-in 600ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.divider-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  vertical-align: middle;
+  margin: 0 10px;
+  opacity: 0.4;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+}
+.pill-accent {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.2);
+  color: var(--color-accent);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  border-radius: 999px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  transition: transform 200ms ease, background 200ms ease;
+}
+.btn-primary:hover {
+  background: rgba(255, 255, 255, 0.92);
+}
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 200ms ease, background 200ms ease;
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text);
+}

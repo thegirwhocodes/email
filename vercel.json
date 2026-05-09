@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/followups",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/memory-maintenance",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
