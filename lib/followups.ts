@@ -154,7 +154,7 @@ function shouldCreateThreadFollowup(email: {
   if (email.isImportant) return ageDays >= 1;
 
   switch (email.tier) {
-    case "sabi_business":
+    case "business":
     case "family":
       return ageDays >= 1;
     case "wesleyan":
@@ -170,7 +170,7 @@ function shouldCreateThreadFollowup(email: {
 function threadImportance(tier: string, isImportant: boolean): number {
   if (isImportant) return 5;
   switch (tier) {
-    case "sabi_business":
+    case "business":
       return 5;
     case "family":
       return 4;
@@ -194,7 +194,7 @@ function followupDueDateIso(
   const base = new Date(receivedAt).getTime();
   const oneDay = 24 * 60 * 60 * 1000;
   const offsetDays =
-    isImportant || tier === "sabi_business" || tier === "family" ? 1 : 2;
+    isImportant || tier === "business" || tier === "family" ? 1 : 2;
   return new Date(base + offsetDays * oneDay).toISOString();
 }
 

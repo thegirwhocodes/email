@@ -3,34 +3,57 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { Mesh } from "@/components/mesh";
 import { useVoice } from "@/components/use-voice";
 import { useTts } from "@/components/use-tts";
 import { CommandPalette } from "@/components/command-palette";
 
-type Stage = "idle" | "thinking" | "speaking" | "listening" | "done" | "error";
+// Streaming voice-email client: per-email window UI, ambient voice, single LLM
+// call per turn via /api/assistant/stream. Pre-loads everything on session init.
 
-interface CurrentItem {
+interface SessionEmail {
   source_id: string;
+  thread_id: string | null;
   from: string;
   subject: string;
+  date: string | null;
   tier: string;
-  one_line_reason: string;
+  is_important: boolean;
+  excerpt: string;
+  full_body?: string;
+  thread_excerpt?: string;
 }
 
-interface SessionState {
-  current_item?: CurrentItem;
-  done?: boolean;
-  wrap_reason?: string;
-  sent?: Array<{ source_id: string; messageId: string }>;
-  archived?: Array<{ source_id: string }>;
-  drafted?: Array<{ source_id: string }>;
+interface SessionBundle {
+  user: { id: string; email: string; name: string | null };
+  profile_text: string | null;
+  open_followups: Array<{ content: string; importance: number; due_date: string | null }>;
+  memory_facts: string[];
+  queue: SessionEmail[];
+  generated_at: string;
 }
 
-type AnyMessages = unknown[];
+interface ParsedMeta {
+  focus_id: string | null;
+  action: "draft" | "send" | "skip" | "archive" | "wrap" | null;
+  draft_direction: string | null;
+  wrap_reason: string | null;
+}
+
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
+type Stage =
+  | "idle"
+  | "initializing"
+  | "ready"
+  | "thinking"
+  | "speaking"
+  | "listening"
+  | "acting"
+  | "done"
+  | "error";
 
 const TIER_LABEL: Record<string, string> = {
-  sabi_business: "Sabi",
+  business: "Founder",
   family: "Family",
   wesleyan: "Wesleyan",
   vox_church: "Vox",
@@ -42,39 +65,45 @@ const TIER_LABEL: Record<string, string> = {
 
 export default function VoiceEmailClient() {
   const voice = useVoice();
-  const [debug, setDebug] = useState(false);
-  const [ttsSource, setTtsSource] = useState<string | null>(null);
-  const tts = useTts({
-    onSource: (source, reason) => {
-      setTtsSource(reason ? `${source} (${reason})` : source);
-    },
-  });
+  const tts = useTts();
 
   const [stage, setStage] = useState<Stage>("idle");
-  const [statusText, setStatusText] = useState("Tap to begin.");
-  const [errorText, setErrorText] = useState<string | null>(null);
+  const [bundle, setBundle] = useState<SessionBundle | null>(null);
+  const [conversation, setConversation] = useState<ChatMsg[]>([]);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState<string | null>(null);
+  const [statusLine, setStatusLine] = useState("Tap to begin.");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [debug, setDebug] = useState(false);
+  const [providerName, setProviderName] = useState<string | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
-
-  const messagesRef = useRef<AnyMessages>([]);
-  const sessionStateRef = useRef<SessionState>({});
-  const [currentItem, setCurrentItem] = useState<CurrentItem | null>(null);
+  const [sessionDone, setSessionDone] = useState(false);
   const [doneReason, setDoneReason] = useState<string | null>(null);
+  const [stats, setStats] = useState({ sent: 0, archived: 0, skipped: 0 });
 
-  // ?debug=1 unlocks the TTS source line in the footer
+  const conversationRef = useRef<ChatMsg[]>([]);
+  conversationRef.current = conversation;
+  const bundleRef = useRef<SessionBundle | null>(null);
+  bundleRef.current = bundle;
+  const focusRef = useRef<string | null>(null);
+  focusRef.current = focusId;
+  const draftRef = useRef<string | null>(null);
+  draftRef.current = draftText;
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("debug") === "1") setDebug(true);
   }, []);
 
-  // Sync the body data attribute so the edge-of-viewport glow can animate
+  // Edge-of-viewport voice indicator state
   useEffect(() => {
     if (typeof document === "undefined") return;
     const state = tts.speaking
       ? "speaking"
       : voice.listening
       ? "listening"
-      : stage === "thinking"
+      : stage === "thinking" || stage === "acting"
       ? "thinking"
       : "idle";
     document.body.setAttribute("data-voice-state", state);
@@ -83,68 +112,319 @@ export default function VoiceEmailClient() {
     };
   }, [tts.speaking, voice.listening, stage]);
 
+  const focusEmail = bundle?.queue.find((e) => e.source_id === focusId) ?? null;
+
+  // ============================================================
+  // Session init
+  // ============================================================
   async function startSession() {
     setHasStarted(true);
-    messagesRef.current = [{ role: "user", content: "begin" }];
-    sessionStateRef.current = {};
-    setCurrentItem(null);
-    setDoneReason(null);
-    setErrorText(null);
-    await runOneTurn();
-  }
+    setStage("initializing");
+    setStatusLine("Reading your inbox…");
+    setErrorMsg(null);
+    setSessionDone(false);
+    setStats({ sent: 0, archived: 0, skipped: 0 });
+    setConversation([]);
+    setFocusId(null);
+    setDraftText(null);
 
-  async function runOneTurn() {
-    setStage("thinking");
-    setStatusText("");
     try {
-      const res = await fetch("/api/assistant/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: messagesRef.current,
-          session_state: sessionStateRef.current,
-        }),
-      });
+      const res = await fetch("/api/assistant/init", { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `turn failed (${res.status})`);
+        throw new Error(err.error || `init failed (${res.status})`);
       }
-      const data: {
-        speak_text: string;
-        messages: AnyMessages;
-        session_state: SessionState;
-        done: boolean;
-      } = await res.json();
+      const b: SessionBundle = await res.json();
+      setBundle(b);
+      bundleRef.current = b;
 
-      messagesRef.current = data.messages;
-      sessionStateRef.current = data.session_state;
-      setCurrentItem(data.session_state.current_item || null);
-
-      const text = data.speak_text || "Nothing to add.";
-      setStatusText(text);
-
-      setStage("speaking");
-      await tts.speak(text);
-
-      if (data.done) {
+      if (b.queue.length === 0) {
         setStage("done");
-        setDoneReason(data.session_state.wrap_reason || null);
-        setStatusText(data.session_state.wrap_reason || "Quiet now.");
+        setStatusLine("Quiet inbox. Nothing waiting.");
+        await tts.speak("Quiet inbox. Nothing waiting.");
+        setSessionDone(true);
         return;
       }
 
-      await listenForUser();
+      setStage("ready");
+      // Kick off the first turn — user implicitly says "begin"
+      await runTurn("begin");
     } catch (err) {
       console.error(err);
       setStage("error");
-      setErrorText(err instanceof Error ? err.message : String(err));
-      setStatusText("Lost the thread. Tap.");
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStatusLine("Lost the thread. Tap.");
     }
   }
 
+  // ============================================================
+  // Per-turn: stream from /api/assistant/stream, sentence-buffer to TTS
+  // ============================================================
+  async function runTurn(userText: string) {
+    if (!bundleRef.current) {
+      setStage("error");
+      setErrorMsg("Session not initialized");
+      return;
+    }
+
+    setStage("thinking");
+    setStatusLine("");
+
+    // Append user turn to history (unless it's the synthetic "begin")
+    const newConversation =
+      userText === "begin"
+        ? conversationRef.current
+        : [
+            ...conversationRef.current,
+            { role: "user" as const, content: userText },
+          ];
+    if (userText !== "begin") setConversation(newConversation);
+
+    // Sentence buffer for chunked TTS
+    let sayAccum = "";
+    let lastSpokenIndex = 0;
+    let pendingSpeak: Promise<void> = Promise.resolve();
+    let metaReceived: ParsedMeta | null = null;
+
+    function maybeFlushSentence(force = false) {
+      const tail = sayAccum.slice(lastSpokenIndex);
+      // Find a sentence boundary
+      const boundary = force
+        ? tail.length
+        : (() => {
+            const m = tail.match(/[\.!\?](\s|$)/);
+            return m ? m.index! + 1 : -1;
+          })();
+      if (boundary < 0) return;
+      const chunk = tail.slice(0, boundary).trim();
+      lastSpokenIndex += boundary;
+      if (chunk.length === 0) return;
+      // Queue this sentence after any in-flight TTS
+      pendingSpeak = pendingSpeak
+        .then(() => {
+          setStage("speaking");
+          return tts.speak(chunk);
+        })
+        .catch(() => undefined);
+    }
+
+    try {
+      const res = await fetch("/api/assistant/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bundle: bundleRef.current,
+          conversation: newConversation,
+          user_text: userText,
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`stream failed (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let currentEvent = "";
+      let currentData = "";
+
+      readLoop: while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line === "") {
+            // Event terminator
+            if (currentEvent && currentData) {
+              try {
+                const data = JSON.parse(currentData);
+                if (currentEvent === "chunk") {
+                  sayAccum += data.text;
+                  setStatusLine(sayAccum);
+                  maybeFlushSentence();
+                } else if (currentEvent === "meta") {
+                  metaReceived = data as ParsedMeta;
+                  if (metaReceived.focus_id) {
+                    if (typeof document !== "undefined" && (document as unknown as { startViewTransition?: (cb: () => void) => void }).startViewTransition) {
+                      (document as unknown as { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
+                        setFocusId(metaReceived!.focus_id);
+                      });
+                    } else {
+                      setFocusId(metaReceived.focus_id);
+                    }
+                    focusRef.current = metaReceived.focus_id;
+                  }
+                } else if (currentEvent === "provider") {
+                  setProviderName(data.name);
+                } else if (currentEvent === "done") {
+                  if (debug) {
+                    console.log("[turn]", data);
+                  }
+                } else if (currentEvent === "error") {
+                  throw new Error(data.message);
+                }
+              } catch (e) {
+                console.warn("[stream] bad event payload", currentEvent, currentData, e);
+              }
+              currentEvent = "";
+              currentData = "";
+            }
+            continue;
+          }
+          if (line.startsWith("event: ")) currentEvent = line.slice(7).trim();
+          else if (line.startsWith("data: ")) currentData = line.slice(6).trim();
+        }
+      }
+
+      // Flush any remaining text
+      maybeFlushSentence(true);
+      await pendingSpeak;
+
+      // Append assistant turn to history
+      const assistantMsg = sayAccum.trim() || "Nothing to add.";
+      setConversation((c) => [...c, { role: "assistant", content: assistantMsg }]);
+
+      // Handle the action
+      if (metaReceived) {
+        await executeAction(metaReceived);
+      } else {
+        // No action → wait for user
+        if (!sessionDone) {
+          await listenForUser();
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setStage("error");
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStatusLine("Lost the thread. Tap.");
+    }
+  }
+
+  // ============================================================
+  // Action execution — wires META to actual API endpoints
+  // ============================================================
+  async function executeAction(meta: ParsedMeta) {
+    const focus = bundleRef.current?.queue.find(
+      (e) => e.source_id === (meta.focus_id || focusRef.current)
+    );
+
+    if (meta.action === "wrap") {
+      setStage("done");
+      setSessionDone(true);
+      setDoneReason(meta.wrap_reason);
+      setStatusLine(meta.wrap_reason || "Quiet now.");
+      return;
+    }
+
+    if (meta.action === "draft" && focus) {
+      setStage("acting");
+      setStatusLine("Drafting in your voice…");
+      try {
+        const res = await fetch("/api/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: focus.from,
+            subject: focus.subject,
+            body: focus.full_body || focus.excerpt,
+            threadId: focus.thread_id,
+            intent: meta.draft_direction,
+          }),
+        });
+        const data = await res.json();
+        const draft = (data.draft as string) || "";
+        if (!draft) {
+          await tts.speak("Couldn't draft that. Skipping.");
+          await listenForUser();
+          return;
+        }
+        setDraftText(draft);
+        draftRef.current = draft;
+        // Read the draft back
+        await tts.speak(`Here's what I'd say. ${draft}`);
+        await listenForUser();
+      } catch {
+        await tts.speak("Draft failed. Moving on.");
+        await listenForUser();
+      }
+      return;
+    }
+
+    if (meta.action === "send" && focus) {
+      const draft = draftRef.current;
+      if (!draft) {
+        await tts.speak("No draft to send. Want me to draft one?");
+        await listenForUser();
+        return;
+      }
+      setStage("acting");
+      setStatusLine("Sending…");
+      try {
+        const fromEmail = extractEmail(focus.from);
+        const subject = focus.subject.startsWith("Re:")
+          ? focus.subject
+          : `Re: ${focus.subject}`;
+        const res = await fetch("/api/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: fromEmail,
+            subject,
+            body: draft,
+            threadId: focus.thread_id,
+          }),
+        });
+        if (!res.ok) throw new Error("send failed");
+        setStats((s) => ({ ...s, sent: s.sent + 1 }));
+        setDraftText(null);
+        draftRef.current = null;
+        // Don't speak again; the LLM will pick up next turn
+        await listenForUser();
+      } catch {
+        await tts.speak("Couldn't send. Moving on.");
+        await listenForUser();
+      }
+      return;
+    }
+
+    if (meta.action === "archive" && focus) {
+      setStage("acting");
+      try {
+        await fetch("/api/archive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messageId: focus.source_id }),
+        });
+        setStats((s) => ({ ...s, archived: s.archived + 1 }));
+      } catch {
+        // Best-effort
+      }
+      await listenForUser();
+      return;
+    }
+
+    if (meta.action === "skip") {
+      setStats((s) => ({ ...s, skipped: s.skipped + 1 }));
+      await listenForUser();
+      return;
+    }
+
+    // No action / null — just listen
+    await listenForUser();
+  }
+
+  // ============================================================
+  // Listening
+  // ============================================================
   async function listenForUser() {
+    if (sessionDone) return;
     setStage("listening");
-    setStatusText("");
+    setStatusLine("");
     try {
       const transcript = await voice.startListening();
       if (!transcript || !transcript.trim()) {
@@ -152,23 +432,22 @@ export default function VoiceEmailClient() {
         await tts.speak("Say that again?");
         return await listenForUser();
       }
-      messagesRef.current = [
-        ...messagesRef.current,
-        { role: "user", content: transcript },
-      ];
-      await runOneTurn();
+      await runTurn(transcript);
     } catch (err) {
       console.error(err);
       setStage("error");
-      setErrorText(err instanceof Error ? err.message : String(err));
-      setStatusText("Mic dropped. Tap.");
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStatusLine("Mic dropped. Tap.");
     }
   }
 
-  function handleOrbTap() {
+  // ============================================================
+  // Tap handler
+  // ============================================================
+  function handlePrimaryTap() {
     tts.prime();
     if (!voice.supported) {
-      setStatusText("Voice needs Chrome on macOS.");
+      setStatusLine("Voice needs Chrome on macOS.");
       return;
     }
     if (tts.speaking) {
@@ -181,12 +460,12 @@ export default function VoiceEmailClient() {
       voice.stopListening();
       return;
     }
-    if (stage === "done") {
+    if (sessionDone || stage === "done") {
       void startSession();
       return;
     }
     if (stage === "error") {
-      void runOneTurn();
+      void startSession();
       return;
     }
     if (!hasStarted) {
@@ -195,36 +474,21 @@ export default function VoiceEmailClient() {
     }
   }
 
-  const orbMode: "idle" | "speaking" | "listening" | "thinking" | "done" =
-    tts.speaking
-      ? "speaking"
-      : voice.listening
-      ? "listening"
-      : stage === "thinking"
-      ? "thinking"
-      : stage === "done"
-      ? "done"
-      : "idle";
-
   let hint = "tap to begin.";
   if (hasStarted) {
-    if (tts.speaking) hint = "tap to interrupt.";
+    if (stage === "initializing") hint = "loading inbox…";
+    else if (tts.speaking) hint = "tap to interrupt.";
     else if (voice.listening) hint = "tap to stop.";
-    else if (stage === "thinking") hint = "";
-    else if (stage === "done") hint = "tap for another pass.";
+    else if (stage === "thinking") hint = "thinking…";
+    else if (stage === "acting") hint = "working…";
+    else if (sessionDone || stage === "done") hint = "tap for another pass.";
     else if (stage === "error") hint = "tap to retry.";
   }
-
-  const sentCount = sessionStateRef.current.sent?.length ?? 0;
-  const archivedCount = sessionStateRef.current.archived?.length ?? 0;
-
-  // Two voices on one surface: assistant lines render in serif italic,
-  // user transcript renders in sans, lower opacity.
-  const showingPartial = !!voice.partial && voice.listening;
 
   return (
     <main className="min-h-screen flex flex-col">
       <CommandPalette onStartSession={() => void startSession()} />
+
       <header className="flex items-center justify-between px-8 py-6">
         <div className="flex items-baseline gap-6">
           <Link
@@ -233,72 +497,154 @@ export default function VoiceEmailClient() {
           >
             voice email
           </Link>
-          <Link
-            href="/digest"
-            className="eyebrow text-text-muted hover:text-text transition-colors"
-          >
-            digest
-          </Link>
         </div>
         <UserButton />
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-12">
-        <button
-          type="button"
-          onClick={handleOrbTap}
-          aria-label="Tap to interact"
-          className="cursor-pointer focus:outline-none transition-transform active:scale-[0.96] fade-in"
-          style={{ transitionTimingFunction: "var(--ease-decel)" }}
-        >
-          <Mesh mode={orbMode} analyser={tts.analyser} size={320} />
-        </button>
-
-        {currentItem && stage !== "done" && (
-          <div className="mt-8 eyebrow fade-in">
-            <span className="text-accent">
-              {TIER_LABEL[currentItem.tier] || currentItem.tier}
-            </span>
-            <span className="divider-dot text-text-muted" />
-            <span className="text-text-secondary normal-case tracking-normal">
-              {cleanFrom(currentItem.from)}
-            </span>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-4 max-w-3xl mx-auto w-full">
+        {!hasStarted && (
+          <div className="text-center fade-in">
+            <p className="text-display-serif text-text text-balance max-w-xl">
+              The smart, reliable email friend you wish you had.
+            </p>
+            <button
+              type="button"
+              onClick={handlePrimaryTap}
+              className="btn-primary mt-10"
+            >
+              begin
+            </button>
           </div>
         )}
 
-        <div className="mt-10 max-w-2xl text-center min-h-[5rem] px-2">
-          {stage === "speaking" || stage === "done" ? (
-            <p className="text-display-serif text-text text-balance fade-in">
-              {statusText}
-            </p>
-          ) : showingPartial ? (
-            <p className="text-text-secondary text-lg italic text-balance fade-in opacity-80">
-              {voice.partial}
-            </p>
-          ) : (
-            <p className="text-text-muted text-lg text-balance">
-              {statusText}
-            </p>
-          )}
-          {errorText && debug && (
-            <p className="mt-3 text-xs text-error font-mono">{errorText}</p>
-          )}
-        </div>
+        {hasStarted && stage === "initializing" && (
+          <div className="text-center fade-in">
+            <p className="text-text-secondary text-lg">Reading your inbox…</p>
+          </div>
+        )}
 
-        {stage === "done" && (sentCount > 0 || archivedCount > 0) && (
-          <div className="mt-10 flex items-center gap-6 eyebrow fade-in delay-200">
-            {sentCount > 0 && (
-              <span>
-                <span className="text-text font-medium">{sentCount}</span> sent
-              </span>
-            )}
-            {archivedCount > 0 && (
-              <span>
-                <span className="text-text font-medium">{archivedCount}</span>{" "}
-                archived
-              </span>
+        {hasStarted && focusEmail && !sessionDone && (
+          <div
+            key={focusEmail.source_id}
+            className="w-full"
+            style={{
+              viewTransitionName: "current-email",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handlePrimaryTap}
+              className="block w-full text-left cursor-pointer focus:outline-none fade-in"
+            >
+              <article className="rounded-2xl border border-border bg-bg-surface px-8 py-7 hover:border-border-strong transition-colors">
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <span className="pill pill-accent">
+                    {TIER_LABEL[focusEmail.tier] || focusEmail.tier}
+                  </span>
+                  {focusEmail.is_important && (
+                    <span className="eyebrow text-warning">important</span>
+                  )}
+                  {focusEmail.date && (
+                    <span className="eyebrow text-text-faint ml-auto">
+                      {formatDate(focusEmail.date)}
+                    </span>
+                  )}
+                </div>
+
+                <h2 className="text-2xl font-medium text-text leading-snug tracking-tight mb-1.5">
+                  {focusEmail.subject}
+                </h2>
+                <p className="text-sm text-text-secondary mb-5">
+                  {cleanFrom(focusEmail.from)}
+                </p>
+
+                <p className="text-text-secondary text-[15px] leading-relaxed line-clamp-5 whitespace-pre-wrap">
+                  {focusEmail.full_body
+                    ? truncate(focusEmail.full_body, 600)
+                    : focusEmail.excerpt}
+                </p>
+              </article>
+            </button>
+
+            {/* The agent's spoken line — assistant voice in serif italic */}
+            <div className="mt-7 px-2 min-h-[5rem]">
+              {(stage === "speaking" || statusLine) && (
+                <p className="text-display-serif text-text text-balance fade-in">
+                  {statusLine || "…"}
+                </p>
+              )}
+              {voice.partial && voice.listening && (
+                <p className="text-text-secondary text-lg italic text-balance fade-in opacity-80">
+                  {voice.partial}
+                </p>
+              )}
+              {draftText && stage !== "speaking" && (
+                <p className="mt-4 text-text-muted text-sm whitespace-pre-wrap">
+                  <span className="eyebrow">draft</span>
+                  <br />
+                  {draftText}
+                </p>
+              )}
+            </div>
+
+            {bundle && bundle.queue.length > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-1.5 opacity-60">
+                {bundle.queue.slice(0, 12).map((e) => (
+                  <span
+                    key={e.source_id}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                      e.source_id === focusId ? "bg-accent" : "bg-text-muted"
+                    }`}
+                  />
+                ))}
+              </div>
             )}
           </div>
+        )}
+
+        {sessionDone && (
+          <div className="text-center fade-in">
+            <p className="text-display-serif text-text text-balance">
+              {doneReason || "Quiet now."}
+            </p>
+            {(stats.sent > 0 || stats.archived > 0 || stats.skipped > 0) && (
+              <div className="mt-8 flex items-center gap-6 eyebrow text-text-muted justify-center">
+                {stats.sent > 0 && (
+                  <span>
+                    <span className="text-text font-medium">{stats.sent}</span>{" "}
+                    sent
+                  </span>
+                )}
+                {stats.archived > 0 && (
+                  <span>
+                    <span className="text-text font-medium">
+                      {stats.archived}
+                    </span>{" "}
+                    archived
+                  </span>
+                )}
+                {stats.skipped > 0 && (
+                  <span>
+                    <span className="text-text font-medium">
+                      {stats.skipped}
+                    </span>{" "}
+                    skipped
+                  </span>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handlePrimaryTap}
+              className="btn-primary mt-10"
+            >
+              another pass
+            </button>
+          </div>
+        )}
+
+        {stage === "error" && errorMsg && debug && (
+          <p className="mt-6 text-xs text-error font-mono">{errorMsg}</p>
         )}
 
         {!voice.supported && (
@@ -314,20 +660,12 @@ export default function VoiceEmailClient() {
         <kbd className="font-mono text-[10px] tracking-normal normal-case px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle">
           ⌘K
         </kbd>
-        {debug && ttsSource && (
+        {debug && providerName && (
           <>
             <span className="divider-dot" />
             <span className="opacity-60 normal-case tracking-normal font-mono text-[10px]">
-              {ttsSource}
+              {providerName}
             </span>
-          </>
-        )}
-        {doneReason && stage === "done" && (
-          <>
-            <span className="divider-dot" />
-            <Link href="/digest" className="hover:text-text transition-colors">
-              digest →
-            </Link>
           </>
         )}
       </footer>
@@ -340,4 +678,26 @@ function cleanFrom(from: string): string {
   if (nameMatch) return nameMatch[1].trim().replace(/^["']|["']$/g, "");
   const m = from.match(/<([^>]+)>/);
   return m ? m[1] : from;
+}
+
+function extractEmail(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  return m ? m[1] : from;
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n).trimEnd() + "…";
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }

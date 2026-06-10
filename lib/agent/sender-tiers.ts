@@ -6,7 +6,7 @@
 // drafting.
 
 export type Tier =
-  | "sabi_business" // Education for Equality / telephony / nonprofit infra
+  | "business" // founder/business work
   | "family"
   | "wesleyan"
   | "vox_church"
@@ -75,8 +75,8 @@ const NOISE_DOMAINS = new Set([
   "commpeak.com",
 ]);
 
-// Domains that are unambiguously Sabi/Education-for-Equality work.
-const SABI_DOMAINS = new Set([
+// Domains that are unambiguously founder/business work.
+const BUSINESS_DOMAINS = new Set([
   "africastalking.com",
   "didww.com",
   "connectsip.com",
@@ -88,7 +88,7 @@ const SABI_DOMAINS = new Set([
 ]);
 
 // Hetzner is mixed — billing is noise, support tickets are work. Keep visible.
-const SABI_LIKELY_DOMAINS = new Set([
+const BUSINESS_LIKELY_DOMAINS = new Set([
   "hetzner.com",
   "info@hetzner.com",
   "support@hetzner.com",
@@ -189,11 +189,11 @@ export function classifySender(input: ClassifyInput): ClassifyResult {
     return { tier: "vox_church", domain, reasoning: "Vox Church community" };
   }
 
-  if (SABI_DOMAINS.has(domain) || SABI_LIKELY_DOMAINS.has(domain)) {
+  if (BUSINESS_DOMAINS.has(domain) || BUSINESS_LIKELY_DOMAINS.has(domain)) {
     return {
-      tier: "sabi_business",
+      tier: "business",
       domain,
-      reasoning: "Known Sabi/Education-for-Equality vendor or partner",
+      reasoning: "Known founder/business vendor or partner",
     };
   }
 
@@ -228,7 +228,7 @@ export function classifySender(input: ClassifyInput): ClassifyResult {
 
 // Default priority order — high tiers come first when sorting flagged items
 export const TIER_PRIORITY: Record<Tier, number> = {
-  sabi_business: 0,
+  business: 0,
   family: 1,
   wesleyan: 2,
   vox_church: 3,
@@ -241,8 +241,8 @@ export const TIER_PRIORITY: Record<Tier, number> = {
 
 // Tone guidance the drafter uses when it knows the tier
 export const TIER_TONE_GUIDANCE: Record<Tier, string> = {
-  sabi_business:
-    'Use Naomi\'s founder voice. Open with "Dear [Name]," or "Hi [Name]!" depending on familiarity. Be structured — bullets/numbered lists for requirements. Sign off "Best regards, Naomi Ivie / Founder, Education for Equality". Mention nonprofit/education context where relevant — she negotiates pricing this way.',
+  business:
+    'Use Naomi\'s founder voice. Open with "Dear [Name]," or "Hi [Name]!" depending on familiarity. Be structured — bullets/numbered lists for requirements. Sign off "Best regards, Naomi Ivie / Founder". Mention nonprofit context where relevant — she negotiates pricing this way.',
   family:
     'Warm and natural. She says "Amennn!" / "Congrats in advance mummy!!" to her mom. No formal greetings — direct. May still sign "Yours sincerely, Naomi Ivie." or just first name.',
   wesleyan:
@@ -250,7 +250,7 @@ export const TIER_TONE_GUIDANCE: Record<Tier, string> = {
   vox_church:
     'Warm community tone. First names. Brief. May reference faith naturally.',
   vendor_outreach:
-    'Polite founder tone. Acknowledge their reach-out, share Education for Equality context briefly, ask the focused question (rates / setup / nonprofit pricing). Sign off "Best regards, Naomi Ivie / Founder, Education for Equality".',
+    'Polite founder tone. Acknowledge their reach-out, share nonprofit context briefly, ask the focused question (rates / setup / nonprofit pricing). Sign off "Best regards, Naomi Ivie / Founder".',
   friend:
     'Casual. "Hi [name]!" Brief. May skip sign-off entirely or use just first name.',
   opportunity:

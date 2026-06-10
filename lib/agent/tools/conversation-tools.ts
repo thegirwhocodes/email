@@ -31,12 +31,12 @@ export const pickNextItemTool: AgentTool = {
       tier: {
         type: "string",
         description:
-          "Sender tier (sabi_business, family, wesleyan, vox_church, vendor_outreach, friend, opportunity, unknown).",
+          "Sender tier (business, family, wesleyan, vox_church, vendor_outreach, friend, opportunity, unknown).",
       },
       one_line_reason: {
         type: "string",
         description:
-          "One sentence on why this is what to surface now (e.g. 'Pelumi has been waiting 8 days for confirmation on toll-free pricing').",
+          "One sentence on why this is what to surface now (e.g. 'Pelumi has been waiting 8 days for confirmation on pricing').",
       },
     },
     required: ["source_id", "from", "subject", "one_line_reason"],
@@ -92,7 +92,7 @@ export const wrapSessionTool: AgentTool = {
       reason: {
         type: "string",
         description:
-          "Brief reason — e.g. 'caught up on Sabi and family, only opportunity-spam remains'.",
+          "Brief reason — e.g. 'caught up on business and family, only opportunity-spam remains'.",
       },
     },
     required: ["reason"],

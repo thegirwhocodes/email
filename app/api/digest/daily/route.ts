@@ -6,7 +6,7 @@ import { queryHaiku } from "@/lib/ai/claude";
 import { loadAssistantContext } from "@/lib/assistant-memory";
 
 // /api/digest/daily — pulls the last 24h of inbox and rolls up the noise/
-// opportunity tiers into one glanceable card. Sabi/family/wesleyan/vox_church
+// opportunity tiers into one glanceable card. Business/family/wesleyan/vox_church
 // items live in the voice-email triage UI; this endpoint is for the OPPORTUNITY
 // tier specifically (fellowships, internships, scholarships, jobs) plus a
 // summary line for the day.
@@ -79,12 +79,12 @@ export async function GET() {
     // Buckets:
     //  - opportunities = the fellowship/intern/scholarship drumbeat
     //  - swept = noise that we'd auto-archive (just count it, don't surface)
-    //  - signal = sabi_business / family / wesleyan / vox_church / vendor_outreach / friend
+    //  - signal = business / family / wesleyan / vox_church / vendor_outreach / friend
     const opportunities = emails.filter((e) => e.tier === "opportunity");
     const swept = emails.filter((e) => e.tier === "noise");
     const signal = emails.filter(
       (e) =>
-        e.tier === "sabi_business" ||
+        e.tier === "business" ||
         e.tier === "family" ||
         e.tier === "wesleyan" ||
         e.tier === "vox_church" ||
