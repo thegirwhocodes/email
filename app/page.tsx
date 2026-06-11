@@ -10,9 +10,9 @@ export default async function HomePage() {
       <main className="min-h-screen flex flex-col">
         <header className="flex items-center justify-between px-8 py-6 fade-in">
           <span className="font-serif italic text-base text-text">
-            voice email
+            Sage Mail
           </span>
-          <span className="eyebrow text-text-faint">cortex</span>
+          <span className="eyebrow text-text-faint">voice email agent</span>
         </header>
 
         <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-16">
@@ -23,7 +23,7 @@ export default async function HomePage() {
           </h1>
 
           <p className="mt-8 text-text-secondary text-base text-balance text-center max-w-md fade-in delay-300">
-            Reads your inbox. Tells you what matters. Drafts replies in your voice. Quietly handles the noise.
+            Reads your inbox. Tells you what matters. Drafts replies in your voice. Sends nothing without your approval.
           </p>
 
           <div className="mt-12 fade-in delay-500">
@@ -34,7 +34,7 @@ export default async function HomePage() {
         </div>
 
         <footer className="px-8 py-6 text-center fade-in delay-500">
-          <span className="eyebrow text-text-faint">part of cortex</span>
+          <span className="eyebrow text-text-faint">built on cortex</span>
         </footer>
       </main>
     );

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ClerkProvider } from "@clerk/nextjs";
@@ -6,8 +6,11 @@ import { dark } from "@clerk/themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "voice email",
-  description: "the smart email friend you wish you had.",
+  title: "Sage Mail",
+  description: "Voice-first email triage that reads what matters and drafts in your voice.",
+};
+
+export const viewport: Viewport = {
   themeColor: "#000000",
 };
 

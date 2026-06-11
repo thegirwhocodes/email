@@ -1,25 +1,49 @@
-# Cortex · voice email
+# Sage Mail
 
-Hands-free email triage. One email at a time. By voice.
+Voice-first email triage for people who need an assistant, not another inbox.
 
-→ Live: https://voice-email-app.vercel.app
+Sage reads the important email first, keeps the session to one decision at a time, drafts in the user's voice, and never sends without explicit approval.
+
+Live: https://voice-email-app.vercel.app
+
+## Why it matters
+
+Most email tools make the inbox faster to scroll. Sage makes it possible to clear the inbox while walking, getting dressed, or recovering from decision fatigue. The product shape is deliberately narrow: one email, one spoken decision, one safe action.
 
 ## What it does
 
-Connect Gmail. Tap the orb. Cortex reads you the top of your inbox one message at a time and you tell it what to do — archive, draft a reply, snooze, delete — all by voice. Drafts come back in your voice (per-user LoRA, see [`thegirwhocodes/spheres-app`](https://github.com/thegirwhocodes/spheres-app) for the Mac SwiftUI predecessor).
+- Prioritizes Gmail by relationship and context: founder/business, family, Wesleyan, opportunities, vendors, friends, and unknown senders.
+- Reads the email aloud, then waits for a voice decision: reply, skip, archive, hear more, revise, send, or stop.
+- Drafts replies using the user's profile, memory, past messages, and thread context.
+- Streams the assistant response sentence by sentence so the voice loop feels immediate.
+- Leaves consequential actions gated behind approval.
 
-## How it works
+## Architecture
 
+```mermaid
+flowchart LR
+  A["Gmail OAuth"] --> B["Session bundle"]
+  B --> C["Priority queue"]
+  C --> D["Voice loop"]
+  D --> E["Claude dispatcher"]
+  E --> F["Tool calls"]
+  F --> G["Draft / send / archive"]
+  E --> H["Streaming TTS"]
 ```
-Mic → Web Speech API → Claude Haiku intent classifier
-  → agentic loop with tool calls (archive / draft / send / snooze)
-  → Gmail API → TTS reply spoken back
-```
-
-Companion to the [Cortex dashboard](https://cortex-web-one.vercel.app). Both share Supabase + Clerk + Anthropic.
 
 ## Stack
-Next.js 16 · Supabase · Clerk · Anthropic Claude · Web Speech API · Gmail OAuth
 
-## Try it
-Sign in with Gmail at [voice-email-app.vercel.app](https://voice-email-app.vercel.app) and tap the orb.
+Next.js 16, TypeScript, Clerk, Supabase, Gmail API, Anthropic Claude, streaming server-sent events, browser speech APIs, and a shared Cortex memory/profile layer.
+
+## Relationship to Cortex
+
+Cortex is the broader personal-AI system: memory, profile, RAG, spheres, and agentic actions. Sage Mail is the focused shipped surface: the email agent you can actually talk to.
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
+
+Add the required Clerk, Supabase, Gmail OAuth, and Anthropic environment variables in `.env.local`.
