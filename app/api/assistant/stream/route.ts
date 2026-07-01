@@ -43,6 +43,7 @@ The META line MUST be valid JSON on a single line.
 - If they say "send" / "looks good" / "go ahead" → action="send", focus_id=current item. SAY: "Sent to <name>."
 - If they say "skip" / "next" / "later" → action="skip", focus_id=NEXT item from queue (you choose), SAY: short intro of the next item.
 - If they say "archive" → action="archive", focus_id=current. Then on the next turn pick the next item.
+- If the system/user says "continue" after a completed send or archive, pick the highest-priority remaining item from the queue, set action=null, and introduce it. Do not mark anything skipped.
 - If they say "I'm done" / "stop" / "later" or you've covered the important items → action="wrap", wrap_reason=short.
 - If you've worked through 3-8 items and what remains is opportunity/noise → wrap, don't drag it out.
 

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { queryHaiku } from "@/lib/ai/claude";
+import { queryPersonalDraftModel } from "@/lib/lora/inference-client";
 
 // Drafts an email reply in the user's voice using:
 //  - their stored profile_text (cortex_profiles)
@@ -60,7 +61,17 @@ export async function draftEmailReply(
     "Output ONLY the email body — no subject line, no metadata, no quoted reply, no signature unless they sign their emails. Match their voice exactly.",
   ].join("\n");
 
-  return queryHaiku(systemPrompt, userPrompt, 1024);
+  const personalDraft = await queryPersonalDraftModel(
+    userId,
+    userPrompt,
+    systemPrompt
+  );
+
+  if (personalDraft?.text) {
+    return cleanDraft(personalDraft.text);
+  }
+
+  return cleanDraft(await queryHaiku(systemPrompt, userPrompt, 1024));
 }
 
 function buildDraftingPrompt(
@@ -90,4 +101,12 @@ function buildDraftingPrompt(
 function extractEmail(fromHeader: string): string {
   const match = fromHeader.match(/<([^>]+)>/);
   return match ? match[1] : fromHeader;
+}
+
+function cleanDraft(text: string): string {
+  return text
+    .trim()
+    .replace(/^```(?:text|markdown)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
 }

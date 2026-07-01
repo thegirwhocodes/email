@@ -167,6 +167,7 @@ export default function VoiceEmailClient() {
       return;
     }
 
+    const focusAtTurnStart = focusRef.current;
     setStage("thinking");
     setStatusLine("");
 
@@ -286,11 +287,16 @@ export default function VoiceEmailClient() {
 
       // Append assistant turn to history
       const assistantMsg = sayAccum.trim() || "Nothing to add.";
-      setConversation((c) => [...c, { role: "assistant", content: assistantMsg }]);
+      const afterAssistantConversation = [
+        ...newConversation,
+        { role: "assistant" as const, content: assistantMsg },
+      ];
+      conversationRef.current = afterAssistantConversation;
+      setConversation(afterAssistantConversation);
 
       // Handle the action
       if (metaReceived) {
-        await executeAction(metaReceived);
+        await executeAction(metaReceived, focusAtTurnStart);
       } else {
         // No action → wait for user
         if (!sessionDone) {
@@ -308,12 +314,17 @@ export default function VoiceEmailClient() {
   // ============================================================
   // Action execution — wires META to actual API endpoints
   // ============================================================
-  async function executeAction(meta: ParsedMeta) {
+  async function executeAction(meta: ParsedMeta, focusAtTurnStart: string | null) {
+    const currentFocusId = focusAtTurnStart || meta.focus_id || focusRef.current;
     const focus = bundleRef.current?.queue.find(
-      (e) => e.source_id === (meta.focus_id || focusRef.current)
+      (e) => e.source_id === currentFocusId
     );
 
     if (meta.action === "wrap") {
+      void persistSessionAction({
+        action: "wrap",
+        reason: meta.wrap_reason || "the important inbox items were handled",
+      });
       setStage("done");
       setSessionDone(true);
       setDoneReason(meta.wrap_reason);
@@ -377,14 +388,21 @@ export default function VoiceEmailClient() {
             subject,
             body: draft,
             threadId: focus.thread_id,
+            sourceId: focus.source_id,
+            from: focus.from,
+            originalSubject: focus.subject,
           }),
         });
         if (!res.ok) throw new Error("send failed");
         setStats((s) => ({ ...s, sent: s.sent + 1 }));
         setDraftText(null);
         draftRef.current = null;
-        // Don't speak again; the LLM will pick up next turn
-        await listenForUser();
+        const remaining = removeFromQueue(focus.source_id);
+        if (remaining.length > 0) {
+          await runTurn("continue");
+        } else {
+          finishQuietly("That was the last important one.");
+        }
       } catch {
         await tts.speak("Couldn't send. Moving on.");
         await listenForUser();
@@ -395,20 +413,50 @@ export default function VoiceEmailClient() {
     if (meta.action === "archive" && focus) {
       setStage("acting");
       try {
-        await fetch("/api/archive", {
+        const res = await fetch("/api/archive", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messageId: focus.source_id }),
+          body: JSON.stringify({
+            messageId: focus.source_id,
+            from: focus.from,
+            subject: focus.subject,
+          }),
         });
+        if (!res.ok) throw new Error("archive failed");
         setStats((s) => ({ ...s, archived: s.archived + 1 }));
       } catch {
-        // Best-effort
+        await tts.speak("Couldn't archive that.");
+        await listenForUser();
+        return;
       }
-      await listenForUser();
+      const remaining = removeFromQueue(focus.source_id);
+      if (remaining.length > 0) {
+        await runTurn("continue");
+      } else {
+        finishQuietly("That was the last important one.");
+      }
       return;
     }
 
     if (meta.action === "skip") {
+      const skipped = bundleRef.current?.queue.find(
+        (e) => e.source_id === (focusAtTurnStart || focusRef.current)
+      );
+      if (skipped) {
+        void persistSessionAction({
+          action: "skip",
+          item: {
+            source_id: skipped.source_id,
+            from: skipped.from,
+            subject: skipped.subject,
+          },
+        });
+        const remaining = removeFromQueue(skipped.source_id);
+        if (remaining.length === 0 && !meta.focus_id) {
+          finishQuietly("That was the last important one.");
+          return;
+        }
+      }
       setStats((s) => ({ ...s, skipped: s.skipped + 1 }));
       await listenForUser();
       return;
@@ -416,6 +464,41 @@ export default function VoiceEmailClient() {
 
     // No action / null — just listen
     await listenForUser();
+  }
+
+  function removeFromQueue(sourceId: string): SessionEmail[] {
+    if (!bundleRef.current) return [];
+    const nextBundle: SessionBundle = {
+      ...bundleRef.current,
+      queue: bundleRef.current.queue.filter((e) => e.source_id !== sourceId),
+    };
+    bundleRef.current = nextBundle;
+    setBundle(nextBundle);
+    return nextBundle.queue;
+  }
+
+  function finishQuietly(reason: string) {
+    void persistSessionAction({ action: "wrap", reason });
+    setStage("done");
+    setSessionDone(true);
+    setDoneReason(reason);
+    setStatusLine(reason);
+  }
+
+  async function persistSessionAction(payload: {
+    action: "skip" | "wrap";
+    reason?: string;
+    item?: { source_id: string; from: string; subject: string };
+  }) {
+    try {
+      await fetch("/api/assistant/session-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Memory persistence should never interrupt the live voice loop.
+    }
   }
 
   // ============================================================
