@@ -199,7 +199,7 @@ export const sendDraftedReplyTool: AgentTool = {
 export const archiveCurrentTool: AgentTool = {
   name: "archive_email",
   description:
-    "Archive a specific email (removes the INBOX label in Gmail). Use when the user says 'archive' or when an email is clearly not worth keeping in front of them.",
+    "Archive a specific email (removes the INBOX label in Gmail). Only use after the user explicitly says to archive this email; otherwise skip or wrap instead.",
   mutates: true,
   input_schema: {
     type: "object",
