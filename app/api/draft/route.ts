@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { draftEmailReply } from "@/lib/ai/email-drafter";
 
 export async function POST(request: NextRequest) {
@@ -20,6 +24,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ draft });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Draft error:", error);
     return NextResponse.json({ error: "Failed to draft" }, { status: 500 });
   }

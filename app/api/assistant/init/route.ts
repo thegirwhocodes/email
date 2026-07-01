@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { buildSessionBundle } from "@/lib/session-bundle";
 
 // Voice-email session init — fires once on session start. Pre-loads everything
@@ -13,6 +17,7 @@ export async function POST() {
     const bundle = await buildSessionBundle(userId, { topN: 12, includeBodies: 6 });
     return NextResponse.json(bundle);
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("session init error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Init failed" },

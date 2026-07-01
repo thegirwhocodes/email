@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 
 // Streaming TTS endpoint. ElevenLabs if configured, otherwise 501 -> browser
 // SpeechSynthesis fallback in the client.
@@ -67,6 +71,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("TTS error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "TTS failed" },

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { supabase } from "@/lib/supabase/client";
 import { sendEmail } from "@/lib/integrations/gmail-send";
 import { getFreshGmailToken } from "@/lib/integrations/gmail-token";
@@ -71,6 +75,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, messageId: result.messageId });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Send error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to send" },

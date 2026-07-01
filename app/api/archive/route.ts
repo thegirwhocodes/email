@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { supabase } from "@/lib/supabase/client";
 import { archiveMessage } from "@/lib/integrations/gmail-send";
 import { getFreshGmailToken } from "@/lib/integrations/gmail-token";
@@ -51,6 +55,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Archive error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed" },

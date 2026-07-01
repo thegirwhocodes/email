@@ -45,9 +45,11 @@ for (const file of [
   "lib/agent/assistant-agent.ts",
   "lib/agent/tools/email-tools.ts",
   "lib/agent/tools/conversation-tools.ts",
+  "lib/auth/session.ts",
   "lib/config/readiness.ts",
   "lib/lora/inference-client.ts",
   "lib/integrations/gmail-token.ts",
+  "scripts/check-production-smoke.mjs",
   ".env.example",
   "README.md",
 ]) {
@@ -63,6 +65,50 @@ assertIncludes(
   "readme promises explicit approval",
   "README.md",
   "never sends without explicit approval"
+);
+
+assertIncludes(
+  "auth helper has typed unauthorized error",
+  "lib/auth/session.ts",
+  "UnauthorizedError"
+);
+assertIncludes(
+  "auth helper has shared unauthorized response",
+  "lib/auth/session.ts",
+  "unauthorizedResponse"
+);
+for (const file of [
+  "app/api/send/route.ts",
+  "app/api/archive/route.ts",
+  "app/api/queue/route.ts",
+  "app/api/draft/route.ts",
+  "app/api/summarize/route.ts",
+  "app/api/intent/route.ts",
+  "app/api/tts/route.ts",
+  "app/api/email/get/route.ts",
+  "app/api/assistant/init/route.ts",
+  "app/api/assistant/turn/route.ts",
+  "app/api/assistant/session-action/route.ts",
+  "app/api/assistant/stream/route.ts",
+  "app/api/agent/triage/route.ts",
+  "app/api/digest/daily/route.ts",
+]) {
+  assertIncludes(
+    `protected route handles unauthorized: ${file}`,
+    file,
+    "isUnauthorizedError"
+  );
+}
+
+assertIncludes(
+  "production smoke checks protected send",
+  "scripts/check-production-smoke.mjs",
+  'path: "/api/send"'
+);
+assertIncludes(
+  "production smoke rejects anonymous APIs",
+  "scripts/check-production-smoke.mjs",
+  "expected 401 or Clerk/Vercel privacy 404"
 );
 
 assertIncludes(

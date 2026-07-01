@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+} from "@/lib/auth/session";
 import { fastChat, type FastMessage } from "@/lib/llm/fast";
 import { renderBundleAsContext, type SessionBundle } from "@/lib/session-bundle";
 
@@ -216,6 +219,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Stream failed",

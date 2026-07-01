@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { runTriageAgent } from "@/lib/agent/triage-agent";
 
 // Run the email-triage agent. This is slow — Sonnet making multiple tool
@@ -25,6 +29,7 @@ export async function POST() {
       },
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Triage agent error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Triage failed" },

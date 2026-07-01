@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { supabase } from "@/lib/supabase/client";
 import { classifySender, type Tier } from "@/lib/agent/sender-tiers";
 import { queryHaiku } from "@/lib/ai/claude";
@@ -169,6 +173,7 @@ Output only the JSON array, no markdown fences.`,
       swept_senders: dedupeFroms(swept).slice(0, 20),
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Daily digest error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Digest failed" },

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { classifyIntent } from "@/lib/ai/intent";
 
 export async function POST(request: NextRequest) {
@@ -18,6 +22,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ intent });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Intent error:", error);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }

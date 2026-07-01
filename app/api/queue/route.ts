@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import {
   fetchAssembledMessagesBySourceIds,
   fetchInboxThreadSummaries,
@@ -44,6 +48,7 @@ export async function GET() {
       scanned_sent_heads: result.scanned_sent_heads,
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Queue error:", error);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

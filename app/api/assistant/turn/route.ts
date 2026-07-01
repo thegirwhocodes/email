@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { runAssistantTurn, type SessionState } from "@/lib/agent/assistant-agent";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -33,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Assistant turn error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Turn failed" },

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth/session";
+import {
+  getUserId,
+  isUnauthorizedError,
+  unauthorizedResponse,
+} from "@/lib/auth/session";
 import { summarizeForVoice } from "@/lib/ai/summarize";
 
 export async function POST(request: NextRequest) {
@@ -18,6 +22,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ summary });
   } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse();
     console.error("Summarize error:", error);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
