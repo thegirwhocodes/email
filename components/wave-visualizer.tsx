@@ -18,6 +18,27 @@ export function WaveVisualizer({ active }: { active: boolean }) {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  function cleanup() {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    if (sourceRef.current) {
+      try { sourceRef.current.disconnect(); } catch {}
+      sourceRef.current = null;
+    }
+    if (analyserRef.current) {
+      try { analyserRef.current.disconnect(); } catch {}
+      analyserRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      void audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
+  }
+
   useEffect(() => {
     if (!active) {
       cleanup();
@@ -74,29 +95,7 @@ export function WaveVisualizer({ active }: { active: boolean }) {
       cancelled = true;
       cleanup();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
-
-  function cleanup() {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    if (sourceRef.current) {
-      try { sourceRef.current.disconnect(); } catch {}
-      sourceRef.current = null;
-    }
-    if (analyserRef.current) {
-      try { analyserRef.current.disconnect(); } catch {}
-      analyserRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      void audioCtxRef.current.close();
-      audioCtxRef.current = null;
-    }
-  }
 
   return (
     <div
