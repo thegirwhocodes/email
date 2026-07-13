@@ -131,11 +131,6 @@ export function CommandPalette({ onStartSession }: PaletteProps) {
     });
   }, [commands, query]);
 
-  // Reset active when filter changes
-  useEffect(() => {
-    setActive(0);
-  }, [filtered.length, query]);
-
   function onListKey(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -196,7 +191,10 @@ export function CommandPalette({ onStartSession }: PaletteProps) {
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(0);
+            }}
             placeholder="what would you like to do?"
             className="flex-1 bg-transparent outline-none text-text placeholder-text-muted text-base"
             spellCheck={false}

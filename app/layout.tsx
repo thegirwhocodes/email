@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,11 +23,11 @@ export default function RootLayout({
       <body>
         <ClerkProvider
           appearance={{
-            baseTheme: dark,
+            theme: "simple",
             variables: {
               colorPrimary: "#A78BFA",
               colorBackground: "#0A0908",
-              colorText: "#F5F2EB",
+              colorForeground: "#F5F2EB",
               borderRadius: "12px",
               fontFamily: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
             },

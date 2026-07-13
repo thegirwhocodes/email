@@ -6,12 +6,11 @@ import { useEffect, useRef, useState } from "react";
 // We DO NOT keep a stream open between sessions — we open on listen, close on stop.
 
 const BAR_COUNT = 14;
+const IDLE_LEVELS = new Array<number>(BAR_COUNT).fill(0.15);
 
 export function WaveVisualizer({ active }: { active: boolean }) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [levels, setLevels] = useState<number[]>(() =>
-    new Array(BAR_COUNT).fill(0.15)
-  );
+  const [levels, setLevels] = useState<number[]>(() => [...IDLE_LEVELS]);
   const rafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -42,7 +41,6 @@ export function WaveVisualizer({ active }: { active: boolean }) {
   useEffect(() => {
     if (!active) {
       cleanup();
-      setLevels(new Array(BAR_COUNT).fill(0.15));
       return;
     }
     let cancelled = false;
@@ -103,7 +101,7 @@ export function WaveVisualizer({ active }: { active: boolean }) {
       className={`wave-container ${active ? "active" : ""}`}
       aria-hidden
     >
-      {levels.map((level, i) => (
+      {(active ? levels : IDLE_LEVELS).map((level, i) => (
         <div
           key={i}
           className="wave-bar"

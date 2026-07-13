@@ -228,7 +228,8 @@ export function Mesh({
     gl.viewport(0, 0, canvas.width, canvas.height);
 
     let raf = 0;
-    let currentState = STATE_INDEX[mode];
+    const initialMode = (canvas.dataset.mode || "idle") as Mode;
+    let currentState = STATE_INDEX[initialMode];
     let targetState = currentState;
     let smoothedAmp = 0;
     const start = performance.now();

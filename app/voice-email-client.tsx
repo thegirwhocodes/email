@@ -93,7 +93,9 @@ export default function VoiceEmailClient() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("debug") === "1") setDebug(true);
+    if (params.get("debug") !== "1") return;
+    const timer = window.setTimeout(() => setDebug(true), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Edge-of-viewport voice indicator state

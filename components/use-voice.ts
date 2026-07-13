@@ -61,7 +61,10 @@ export function useVoice(): VoiceApi {
     };
     const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
     const supported = !!Ctor && "speechSynthesis" in window;
-    setState((s) => ({ ...s, supported }));
+    const supportTimer = window.setTimeout(
+      () => setState((s) => ({ ...s, supported })),
+      0
+    );
 
     if (supported && Ctor) {
       const rec = new Ctor();
@@ -130,6 +133,21 @@ export function useVoice(): VoiceApi {
       pickVoice();
       window.speechSynthesis.onvoiceschanged = pickVoice;
     }
+
+    return () => {
+      window.clearTimeout(supportTimer);
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        recognition.onresult = null;
+        recognition.onend = null;
+        recognition.onerror = null;
+        recognition.abort();
+      }
+      recognitionRef.current = null;
+    };
   }, []);
 
   const speak = useCallback((text: string): Promise<void> => {
